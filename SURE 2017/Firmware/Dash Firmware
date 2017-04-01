@@ -1,0 +1,232 @@
+#include <Adafruit_NeoPixel.h> //NeoPixel Library
+
+
+#define RPM_PIN            6   //RPM LED strip pin
+#define oilTemp_PIN        9   //Oil temp LED strip pin
+#define waterTemp_PIN      10  //Water temp LED strip pin
+
+#define oilRaw             A0  //Oil temperature sensor pin
+#define waterRaw           A1  //Water temperature sesnor pin
+
+
+#define NUMPIXELS_RPM      20  //Number of LED's on RPM strip
+#define NUMPIXELS_OIL      10  //Number of LED's on Oil Temp strip
+#define NUMPIXELS_WATER    10  //Number of LED's on Water Temp strip
+
+
+#define period      100  //Refresh period of dash display
+#define numTach     4    //Number of tacho 'clicks' per revolution of the engine
+
+
+
+//Setting up library for each of the LED strips. (RPM_LED, OIL_LED & WATER_LED)
+
+Adafruit_NeoPixel RPM_LED = Adafruit_NeoPixel(NUMPIXELS_RPM, RPM_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel OIL_LED = Adafruit_NeoPixel(NUMPIXELS_OIL, oilTemp_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel WATER_LED = Adafruit_NeoPixel(NUMPIXELS_WATER, waterTemp_PIN, NEO_GRB + NEO_KHZ800);
+
+
+ 
+ //Setting up colour constants (RGB)
+ 
+ uint32_t red = RPM_LED.Color(255, 0, 0);
+ uint32_t green = RPM_LED.Color(0, 255, 0);
+ uint32_t blue = RPM_LED.Color(0, 0, 255);
+ uint32_t yellow = RPM_LED.Color(255, 255, 0);
+ uint32_t white = RPM_LED.Color(255, 255, 255);
+ uint32_t blank = RPM_LED.Color(0,0,0);
+ uint32_t pink = RPM_LED.Color(255,105,180);
+
+
+ 
+ int frequency = 0; //Tacho frequency
+ int  rpm = 0;  //RPM 
+ int  oil_tempRAW = 0;  //Raw analogue value from oilRaw pin
+ int  water_tempRAW = 0;  //Raw analogue value from waterRaw pin
+ int  oilTemp; //Mapped temperature value from oil_tempRAW
+ int  waterTemp;  //Mapped temperature value from water_tempRAW
+ int  rpm_ledNum;  //Mapped temp value for LED strip (0-19)
+ int  oil_ledNum;  //Mapped temp value for LED strip (0-9)
+ int  water_ledNum;  //Mapped temp value for LED strip (0-9)
+
+ 
+ unsigned long lastMillis = 0;  //'Millis' value last time dash refresh was triggerd
+ volatile int count = 1;  //Number of times interupt from tacho is triggerd
+ 
+ 
+ 
+ void rpm_int();  //Interupt routine for Tach count
+ void setLED();  //Sets up LED strip colours
+
+  
+ void setup()
+ {
+ Serial.begin(9600);  //Set up Serial Communication for Debugging
+ 
+ RPM_LED.begin(); // This initializes the NeoPixel library.
+ OIL_LED.begin(); // This initializes the NeoPixel library.
+ WATER_LED.begin(); // This initializes the NeoPixel library.
+
+ RPM_LED.setBrightness(50);  //Setting up brightness for LED strips (0-255)
+ OIL_LED.setBrightness(50);  //Setting up brightness for LED strips (0-255)
+ WATER_LED.setBrightness(50);  //Setting up brightness for LED strips (0-255)
+ 
+ pinMode(2,INPUT_PULLUP);  //Setting pullup on pin 2 (Not need when using tacho)
+ attachInterrupt(digitalPinToInterrupt(2), rpm_int, FALLING);  //Setting up interrupt, (interrupt pin , interupt routine , trigguring type) 
+
+
+ }
+ 
+ void loop()
+ {
+ 
+ if((millis()-lastMillis)>=period)  //Runs dash refresh when refresh period has passed
+ {
+      
+      detachInterrupt(digitalPinToInterrupt(2));  //Dissable interupt while running refresh
+
+      setLED();  //Run function to initialize LED's
+
+      frequency = count*(1000/period)/numTach;  //Caluculating engine frequency
+      rpm = frequency * 60;  //Calculate engine RPM
+      
+      
+      ////Debug for RPM LED strip 
+      //rpm=rpm+100;  
+      //if(rpm==5200)
+      //{
+      //  rpm=0;
+      //}
+
+
+      
+      oil_tempRAW = analogRead(oilRaw);  //Getting raw temp sensor data (0-1023)
+      water_tempRAW = analogRead(waterRaw);
+
+      oilTemp = map(oil_tempRAW,0,1023,50,120);  //Mapping raw temp data to correct scale (from datasheet)
+      waterTemp = map(water_tempRAW,0,1023,50,120);
+
+      rpm_ledNum = map(rpm,1000,5000,0,19);  //Mapping RPM to correct number of LED's on strip to create bars
+      oil_ledNum = map(oilTemp,75,105,0,9);  //Mapping TEMP to correct number of LED's on strip to create Dot
+      water_ledNum = map(waterTemp,75,105,0,9);  //Mapping TEMP to correct number of LED's on strip to create Dot
+      
+      ////Debug
+      //Serial.println(rpm_ledNum);
+      //Serial.println(oil_ledNum);
+      //Serial.println(water_ledNum);
+      
+     if(oilTemp>100)  //Set oil strip to red if over temperature
+     {
+        for(int i=0;i<=9;i++)
+        {
+          OIL_LED.setPixelColor(i,red);  
+         }    
+     }
+
+     if(waterTemp>100)  //Set water strip to red if over temperature
+     {
+        for(int i=0;i<=9;i++)
+        {
+          WATER_LED.setPixelColor(i,red);  
+         }    
+     }
+      
+      
+      
+      for(int i =rpm_ledNum; i<=19;i++)  //Create bars by blanking over LED's
+      {
+        RPM_LED.setPixelColor((i+1),blank);
+      }
+      
+      
+      OIL_LED.setPixelColor(oil_ledNum,pink);  //Place pink dot on Oil temp strip
+
+      WATER_LED.setPixelColor(water_ledNum,pink);  //Place pink dot on Water temp strip
+   
+
+  
+      RPM_LED.show(); // This sends the updated pixel color to the hardware.
+      OIL_LED.show(); // This sends the updated pixel color to the hardware.
+      WATER_LED.show(); // This sends the updated pixel color to the hardware.
+ 
+ 
+      Serial.print("RPM =\t"); //print the word "RPM" and tab.
+      Serial.print(rpm); // print the rpm value.
+      Serial.print("\t Hz=\t"); //print the word "Hz".
+      Serial.print(frequency); //print revolutions per second or Hz. And print new line or enter.
+      Serial.print("\t OIL TEMP =\t"); //print the word "RPM" and tab.
+      Serial.print(oilTemp); // print the rpm value.
+      Serial.print("\t WATER TEMP=\t"); //print the word "Hz".
+      Serial.print(waterTemp); //print revolutions per second or Hz. And print new line or enter.
+      Serial.print("\t lastMillis \t"); //print revolutions per second or Hz. And print new line or enter.
+      Serial.println(lastMillis ); //print revolutions per second or Hz. And print new line or enter.
+ 
+ 
+ 
+ 
+      count=0;  //Reset Tacho counter
+      lastMillis = millis(); // Update lasmillis
+      attachInterrupt(digitalPinToInterrupt(2), rpm_int, FALLING);  //Re-enable interupt
+  }
+  
+  
+  
+  }
+ 
+ 
+ void rpm_int()  //this code will be executed every time the interrupt 0 (pin2) gets low.
+ {
+  count++;  //Increment tacho counter
+ }
+
+ 
+ 
+
+ void setLED()  //Initialise LED strip colours
+ {
+  
+  for(int i=0;i<=6;i++)
+  {
+    RPM_LED.setPixelColor(i,blue);  
+  }
+  for(int i=7;i<=12;i++)
+  {
+    RPM_LED.setPixelColor(i,green);  
+  }
+  for(int i=13;i<=19;i++)
+  {
+    RPM_LED.setPixelColor(i,red);  
+  }
+
+
+  for(int i=0;i<=2;i++)
+  {
+    WATER_LED.setPixelColor(i,blue);  
+  }
+  for(int i=3;i<=6;i++)
+  {
+    WATER_LED.setPixelColor(i,green);  
+  }
+  for(int i=7;i<=9;i++)
+  {
+    WATER_LED.setPixelColor(i,red);  
+  }
+
+
+
+  for(int i=0;i<=2;i++)
+  {
+    OIL_LED.setPixelColor(i,blue);  
+  }
+  for(int i=3;i<=6;i++)
+  {
+    OIL_LED.setPixelColor(i,green);  
+  }
+  for(int i=7;i<=9;i++)
+  {
+    OIL_LED.setPixelColor(i,red);  
+  }
+
+
+  
+ }
