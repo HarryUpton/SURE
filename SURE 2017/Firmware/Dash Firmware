@@ -57,8 +57,8 @@ Adafruit_NeoPixel WATER_LED = Adafruit_NeoPixel(NUMPIXELS_WATER, waterTemp_PIN, 
  
  
  
- void rpm_int();
- void setLED();
+ void rpm_int();  //Interupt routine for Tach count
+ void setLED();  //Sets up LED strip colours
 
   
  void setup()
