@@ -1,6 +1,3 @@
-//Harrison Upton
-
-
 #include <Adafruit_NeoPixel.h> //NeoPixel Library
 
 
@@ -18,6 +15,7 @@
 
 
 #define period      100  //Refresh period of dash display
+#define numTach     4    //Number of tacho 'clicks' per revolution of the engine
 
 
 
@@ -63,18 +61,18 @@ Adafruit_NeoPixel WATER_LED = Adafruit_NeoPixel(NUMPIXELS_WATER, waterTemp_PIN, 
   
  void setup()
  {
- Serial.begin(9600); 
+ Serial.begin(9600);  //Set up Serial Communication for Debugging
  
  RPM_LED.begin(); // This initializes the NeoPixel library.
  OIL_LED.begin(); // This initializes the NeoPixel library.
  WATER_LED.begin(); // This initializes the NeoPixel library.
 
- RPM_LED.setBrightness(50);
- OIL_LED.setBrightness(50); 
- WATER_LED.setBrightness(50);
+ RPM_LED.setBrightness(50);  //Setting up brightness for LED strips (0-255)
+ OIL_LED.setBrightness(50);  //Setting up brightness for LED strips (0-255)
+ WATER_LED.setBrightness(50);  //Setting up brightness for LED strips (0-255)
  
- pinMode(2,INPUT_PULLUP);
- attachInterrupt(digitalPinToInterrupt(2), rpm_int, FALLING);
+ pinMode(2,INPUT_PULLUP);  //Setting pullup on pin 2 (Not need when using tacho)
+ attachInterrupt(digitalPinToInterrupt(2), rpm_int, FALLING);  //Setting up interrupt, (interrupt pin , interupt routine , trigguring type) 
 
 
  }
@@ -82,37 +80,42 @@ Adafruit_NeoPixel WATER_LED = Adafruit_NeoPixel(NUMPIXELS_WATER, waterTemp_PIN, 
  void loop()
  {
  
- if((millis()-lastMillis)>=period)
+ if((millis()-lastMillis)>=period)  //Runs dash refresh when refresh period has passed
  {
       
-      detachInterrupt(digitalPinToInterrupt(2));
+      detachInterrupt(digitalPinToInterrupt(2));  //Dissable interupt while running refresh
 
-      setLED(); 
+      setLED();  //Run function to initialize LED's
 
-      frequency = count*(1000/period)/4;
-      //rpm = frequency * 60;
-      rpm=rpm+100;
-
-      if(rpm==5200)
-      {
-        rpm=0;
-      }
+      frequency = count*(1000/period)/numTach;  //Caluculating engine frequency
+      rpm = frequency * 60;  //Calculate engine RPM
+      
+      
+      ////Debug for RPM LED strip 
+      //rpm=rpm+100;  
+      //if(rpm==5200)
+      //{
+      //  rpm=0;
+      //}
 
 
       
-      oil_tempRAW = analogRead(oilRaw);
+      oil_tempRAW = analogRead(oilRaw);  //Getting raw temp sensor data (0-1023)
       water_tempRAW = analogRead(waterRaw);
 
-      oilTemp = map(oil_tempRAW,0,1023,50,120);
+      oilTemp = map(oil_tempRAW,0,1023,50,120);  //Mapping raw temp data to correct scale (from datasheet)
       waterTemp = map(water_tempRAW,0,1023,50,120);
 
-      rpm_ledNum = map(rpm,1000,5000,0,19);
-      oil_ledNum = map(oilTemp,75,105,0,9);
-      water_ledNum = map(waterTemp,75,105,0,9);
-
-      Serial.println(rpm_ledNum);
+      rpm_ledNum = map(rpm,1000,5000,0,19);  //Mapping RPM to correct number of LED's on strip to create bars
+      oil_ledNum = map(oilTemp,75,105,0,9);  //Mapping TEMP to correct number of LED's on strip to create Dot
+      water_ledNum = map(waterTemp,75,105,0,9);  //Mapping TEMP to correct number of LED's on strip to create Dot
       
-     if(oilTemp>100)
+      ////Debug
+      //Serial.println(rpm_ledNum);
+      //Serial.println(oil_ledNum);
+      //Serial.println(water_ledNum);
+      
+     if(oilTemp>100)  //Set oil strip to red if over temperature
      {
         for(int i=0;i<=9;i++)
         {
@@ -120,7 +123,7 @@ Adafruit_NeoPixel WATER_LED = Adafruit_NeoPixel(NUMPIXELS_WATER, waterTemp_PIN, 
          }    
      }
 
-     if(waterTemp>100)
+     if(waterTemp>100)  //Set water strip to red if over temperature
      {
         for(int i=0;i<=9;i++)
         {
@@ -130,15 +133,15 @@ Adafruit_NeoPixel WATER_LED = Adafruit_NeoPixel(NUMPIXELS_WATER, waterTemp_PIN, 
       
       
       
-      for(int i =rpm_ledNum; i<=19;i++)
+      for(int i =rpm_ledNum; i<=19;i++)  //Create bars by blanking over LED's
       {
         RPM_LED.setPixelColor((i+1),blank);
       }
       
       
-      OIL_LED.setPixelColor(oil_ledNum,pink);
+      OIL_LED.setPixelColor(oil_ledNum,pink);  //Place pink dot on Oil temp strip
 
-      WATER_LED.setPixelColor(water_ledNum,pink);
+      WATER_LED.setPixelColor(water_ledNum,pink);  //Place pink dot on Water temp strip
    
 
   
@@ -161,25 +164,25 @@ Adafruit_NeoPixel WATER_LED = Adafruit_NeoPixel(NUMPIXELS_WATER, waterTemp_PIN, 
  
  
  
-      count=0;
+      count=0;  //Reset Tacho counter
       lastMillis = millis(); // Update lasmillis
-      attachInterrupt(digitalPinToInterrupt(2), rpm_int, FALLING); 
+      attachInterrupt(digitalPinToInterrupt(2), rpm_int, FALLING);  //Re-enable interupt
   }
   
   
   
   }
- // this code will be executed every time the interrupt 0 (pin2) gets low.
  
- void rpm_int()
+ 
+ void rpm_int()  //this code will be executed every time the interrupt 0 (pin2) gets low.
  {
-  count++;
+  count++;  //Increment tacho counter
  }
 
  
  
 
- void setLED()
+ void setLED()  //Initialise LED strip colours
  {
   
   for(int i=0;i<=6;i++)
