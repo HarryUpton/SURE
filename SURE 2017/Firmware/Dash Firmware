@@ -8,7 +8,6 @@
 
 
 
-sdgSDG
 
 
 #include <Adafruit_NeoPixel.h> //NeoPixel Library
