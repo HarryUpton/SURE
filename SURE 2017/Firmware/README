@@ -1,1 +1,8 @@
 This area is for the firmware for the SURE car/
+
+
+Any changes to the program need to be made in the SURE development branch of the GitHub repository.
+
+If changes have been made to the code, the changes need to be committed to the branch at the bottom of the GitHub page.
+
+When you are happy with the change and want to merge them with the Master, A pull request needs to be made where a final reveiw is made.
