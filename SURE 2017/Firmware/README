@@ -1,7 +1,7 @@
 This area is for the firmware for the SURE car.
 
 
-Any changes to the program need to be made in the SURE development branch of the GitHub repository.
+Any changes to the program need to be made in the SURE 'Dash Firmware Development' branch of the GitHub repository.
 
 If changes have been made to the code, the changes need to be committed to the branch at the bottom of the GitHub page.
 
