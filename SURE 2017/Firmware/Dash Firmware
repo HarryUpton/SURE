@@ -16,10 +16,11 @@
 #define RPM_PIN            6   //RPM LED strip pin
 #define oilTemp_PIN        9   //Oil temp LED strip pin
 #define waterTemp_PIN      10  //Water temp LED strip pin
+#define switchPin          3   //Mode Switch pin
+#define tacho              2
 
 #define oilRaw             A0  //Oil temperature sensor pin
 #define waterRaw           A1  //Water temperature sesnor pin
-
 
 #define NUMPIXELS_RPM      20  //Number of LED's on RPM strip
 #define NUMPIXELS_OIL      10  //Number of LED's on Oil Temp strip
@@ -60,6 +61,8 @@ Adafruit_NeoPixel WATER_LED = Adafruit_NeoPixel(NUMPIXELS_WATER, waterTemp_PIN, 
  int  rpm_ledNum;          //Mapped temp value for LED strip (0-19)
  int  oil_ledNum;          //Mapped temp value for LED strip (0-9)
  int  water_ledNum;        //Mapped temp value for LED strip (0-9)
+ int  mode = 1;                //Mode (1-3) for display
+ int  switch = 0;
 
  
  unsigned long lastMillis = 0;  //'Millis' value last time dash refresh was triggerd
@@ -83,8 +86,10 @@ Adafruit_NeoPixel WATER_LED = Adafruit_NeoPixel(NUMPIXELS_WATER, waterTemp_PIN, 
  OIL_LED.setBrightness(50);    //Setting up brightness for LED strips (0-255)
  WATER_LED.setBrightness(50);  //Setting up brightness for LED strips (0-255)
  
- pinMode(2,INPUT_PULLUP);                                      //Setting pullup on pin 2 (Not need when using tacho)
- attachInterrupt(digitalPinToInterrupt(2), rpm_int, FALLING);  //Setting up interrupt, (interrupt pin , interupt routine , trigguring type) 
+ pinMode(switchPin,INPUT_PULLUP);                                  //Setting pullup on mode switch (Not need when using tacho)
+ 
+ pinMode(tacho,INPUT_PULLUP);                                      //Setting pullup on tacho (Not need when using tacho)
+ attachInterrupt(digitalPinToInterrupt(tacho), rpm_int, FALLING);  //Setting up interrupt, (interrupt pin , interupt routine , trigguring type) 
 
 
  }
@@ -98,6 +103,17 @@ Adafruit_NeoPixel WATER_LED = Adafruit_NeoPixel(NUMPIXELS_WATER, waterTemp_PIN, 
       detachInterrupt(digitalPinToInterrupt(2));  //Dissable interupt while running refresh
 
       setLED();  //Run function to initialize LED's
+      
+      switch = digitalRead (switchPin);
+      
+      if (switch == 1)
+      {
+          mode++;
+          if (mode == 4)
+          {
+             mode = 1;
+          }
+      }
 
       frequency = count*(1000/period)/numTach;  //Caluculating engine frequency
       rpm = frequency * 60;  //Calculate engine RPM
