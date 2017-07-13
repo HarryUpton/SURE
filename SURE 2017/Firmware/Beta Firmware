@@ -1,0 +1,405 @@
+//Arduino sketch for SURE 2017 dash display.
+//Info on the NeoPixel library can be found at   :   https://learn.adafruit.com/adafruit-neopixel-uberguide/overview
+
+//Any changes to the program need to be made in the SURE development branch of the GitHub repository.
+//If changes have been made to the code, the changes need to be committed to the branch at the bottom of the GitHub page.
+//When you are happy with the change and want to merge them with the Master, A pull request needs to be made where a final reveiw is made.
+
+
+
+
+
+
+#include <Adafruit_NeoPixel.h> //NeoPixel Library
+
+
+#define ledPin             13  //LED strip pin
+#define switchPin          3   //Mode Switch pin
+#define tacho              2
+
+#define oilRaw             A0  //Oil temperature sensor pin
+#define waterRaw           A1  //Water temperature sesnor pin
+
+#define NUMPIXELS_RPM      20  //Number of LED's on RPM strip
+#define NUMPIXELS_OIL      10  //Number of LED's on Oil Temp strip
+#define NUMPIXELS_WATER    10  //Number of LED's on Water Temp strip
+#define NUMPIXELS_MODE     3
+#define NUMPIXELS_TOTAL    43  //Total number of LED's in strip
+
+
+#define period      100  //Refresh period of dash display
+#define numTach     4    //Number of tacho 'clicks' per revolution of the engine
+
+
+
+//Setting up library for each of the LED strips. (RPM_LED, OIL_LED & WATER_LED)
+
+Adafruit_NeoPixel LED = Adafruit_NeoPixel(NUMPIXELS_TOTAL, ledPin, NEO_GRB + NEO_KHZ800);
+
+
+
+ 
+ //Setting up colour constants (RGB)
+ 
+ uint32_t red = LED.Color(255, 0, 0);
+ uint32_t green = LED.Color(0, 255, 0);
+ uint32_t blue = LED.Color(0, 0, 255);
+ uint32_t yellow = LED.Color(255, 255, 0);
+ uint32_t white = LED.Color(255, 255, 255);
+ uint32_t blank = LED.Color(0,0,0);
+ uint32_t pink = LED.Color(255,105,180);
+
+
+ 
+ int frequency = 0;        //Tacho frequency
+ int  rpm = 0;             //RPM 
+ int  oil_tempRAW = 0;     //Raw analogue value from oilRaw pin
+ int  water_tempRAW = 0;   //Raw analogue value from waterRaw pin
+ int  oilTemp;             //Mapped temperature value from oil_tempRAW
+ int  waterTemp;           //Mapped temperature value from water_tempRAW
+ int  rpm_ledNum;          //Mapped temp value for LED strip (0-19)
+ int  oil_ledNum;          //Mapped temp value for LED strip (0-9)
+ int  water_ledNum;        //Mapped temp value for LED strip (0-9)
+ int  mode = 1;            //Mode (1-3) for display
+ int  button = 0;
+
+ 
+ unsigned long lastMillis = 0;  //'Millis' value last time dash refresh was triggerd
+ volatile int count = 1;        //Number of times interupt from tacho is triggerd
+ 
+ 
+ 
+ void rpm_int();  //Interupt routine for Tach count
+ void setLED();  //Sets up LED strip colours
+ int rpm_Diplay();
+ int oil_Diplay();
+ int water_Diplay();
+
+  
+ void setup()
+ {
+ Serial.begin(9600);  //Set up Serial Communication for Debugging
+ 
+ LED.begin();     // This initializes the NeoPixel library.
+
+
+ LED.setBrightness(50);    //Setting up brightness for LED strips (0-255)
+
+ DDRD = 01001111;
+ DDRB = 11111100;
+
+ 
+ pinMode(switchPin,INPUT_PULLUP);                                  //Setting pullup on mode switch (Not need when using tacho)
+ 
+ pinMode(tacho,INPUT_PULLUP);                                      //Setting pullup on tacho (Not need when using tacho)
+ attachInterrupt(digitalPinToInterrupt(tacho), rpm_int, FALLING);  //Setting up interrupt, (interrupt pin , interupt routine , trigguring type) 
+
+
+ }
+ 
+ void loop()
+ {
+ 
+ if((millis()-lastMillis)>=period)  //Runs dash refresh when refresh period has passed
+ {
+      
+      detachInterrupt(digitalPinToInterrupt(2));  //Dissable interupt while running refresh
+
+      setLED();  //Run function to initialize LED's
+      
+      button = digitalRead (switchPin);
+      
+      if (button == 0)
+      {
+          delay(10);
+          mode++;
+          if (mode == 4)
+          {
+             mode = 1;
+          }
+      }
+
+      
+
+      frequency = count*(1000/period)/numTach;  //Caluculating engine frequency
+      rpm = frequency * 60;  //Calculate engine RPM
+      
+      
+      ////Debug for RPM LED strip 
+      //rpm=rpm+100;  
+      //if(rpm==5200)
+      //{
+      //  rpm=0;
+      //}
+
+
+      
+      oil_tempRAW = analogRead(oilRaw);      //Getting raw temp sensor data (0-1023)
+      water_tempRAW = analogRead(waterRaw);  //Getting raw temp sensor data (0-1023)
+
+      oilTemp = map(oil_tempRAW,0,1023,50,120);     //Mapping raw temp data to correct scale (from datasheet)
+      waterTemp = map(water_tempRAW,0,1023,50,120); //Mapping raw temp data to correct scale (from datasheet)
+
+      rpm_ledNum = map(rpm,1000,5000,0,19);     //Mapping RPM to correct number of LED's on strip to create bars
+      oil_ledNum = map(oilTemp,75,105,0,9);     //Mapping TEMP to correct number of LED's on strip to create Dot
+      water_ledNum = map(waterTemp,75,105,0,9); //Mapping TEMP to correct number of LED's on strip to create Dot
+      
+      ////Debug
+      //Serial.println(rpm_ledNum);
+      //Serial.println(oil_ledNum);
+      //Serial.println(water_ledNum);
+      
+     if(oilTemp>100)                      //Set oil strip to red if over temperature
+     {
+        for(int i=20;i<=29;i++)             //Scroll through each LED in strip
+        {
+          LED.setPixelColor(i,red);   //Write colours to LED 'i' in strip
+        }    
+     }
+
+     if(waterTemp>100)                    //Set water strip to red if over temperature
+     {
+        for(int i=30;i<=39;i++)             //Scroll through each LED in strip
+        {
+          LED.setPixelColor(i,red); //Write colours to LED 'i' in strip
+        }    
+     }
+      
+      
+      
+      for(int i =rpm_ledNum; i<=19;i++)   //Create bars by blanking over LED's
+      {
+        LED.setPixelColor((i+1),blank);
+      }
+      
+      
+      LED.setPixelColor(oil_ledNum + 20,pink);      //Place pink dot on Oil temp strip
+
+      LED.setPixelColor(water_ledNum + 30,pink);  //Place pink dot on Water temp strip
+      
+      LED.setPixelColor(mode+39,red);             //Place red dot on mode  
+
+  
+      LED.show();   // This sends the updated pixel color to the hardware.
+
+      
+      if(mode==1)
+      {
+        rpm_Diplay(rpm);      
+      }
+
+      else if(mode==2)
+      {
+        oil_Diplay(oilTemp);
+      }
+
+      else if(mode=3)
+      {
+        water_Diplay(waterTemp);
+      }
+
+ 
+ 
+      //Output to arduino serial monitor
+      
+      Serial.print("RPM =\t");          //print the word "RPM" and tab.
+      Serial.print(rpm);                //print the rpm value.
+      Serial.print("\t Hz=\t");         //print the word "Hz".
+      Serial.print(frequency);          //print revolutions per second or Hz. And print new line or enter.
+      Serial.print("\t OIL TEMP =\t");  //print the word "RPM" and tab.
+      Serial.print(oilTemp);            // print the rpm value.
+      Serial.print("\t WATER TEMP=\t"); //print the word "Hz".
+      Serial.print(waterTemp);          //print revolutions per second or Hz. And print new line or enter.
+      Serial.print("\t lastMillis= \t"); //print revolutions per second or Hz. And print new line or enter.
+      Serial.print(lastMillis );      //print revolutions per second or Hz. And print new line or enter.
+      Serial.print("\t mode= \t"); //print revolutions per second or Hz. And print new line or enter.
+      Serial.println(mode);      //print revolutions per second or Hz. And print new line or enter.
+ 
+ 
+ 
+ 
+      count=0;                                                      //Reset Tacho counter
+      lastMillis = millis();                                        // Update lasmillis
+      attachInterrupt(digitalPinToInterrupt(2), rpm_int, FALLING);  //Re-enable interupt
+  }
+  
+  
+  
+  }
+ 
+ 
+ void rpm_int()  //this code will be executed every time the interrupt 0 (pin2) gets low.
+ {
+  count++;       //Increment tacho counter
+ }
+
+ 
+ 
+
+ void setLED()  //Initialise LED strip colours
+ {
+  
+  for(int i=0;i<=6;i++)
+  {
+    LED.setPixelColor(i,blue);  
+  }
+  for(int i=7;i<=12;i++)
+  {
+    LED.setPixelColor(i,green);  
+  }
+  for(int i=13;i<=19;i++)
+  {
+    LED.setPixelColor(i,red);
+  }
+
+
+  for(int i=20;i<=22;i++)
+  {
+    LED.setPixelColor(i,blue);  
+  }
+  for(int i=23;i<=26;i++)
+  {
+    LED.setPixelColor(i,green);  
+  }
+  for(int i=27;i<=29;i++)
+  {
+    LED.setPixelColor(i,red);  
+  }
+
+
+
+  for(int i=30;i<=32;i++)
+  {
+    LED.setPixelColor(i,blue);  
+  }
+  for(int i=33;i<=36;i++)
+  {
+    LED.setPixelColor(i,green);  
+  }
+  for(int i=37;i<=39;i++)
+  {
+    LED.setPixelColor(i,red);  
+  }
+
+
+  for(int i=40;i<42;i++)
+  {
+    LED.setPixelColor(i,red);  
+  }
+ }
+
+
+
+ int rpm_Diplay(int rpm)
+ {
+  if(rpm<10)
+  {
+    PORTD = (rpm<<4) & 11110000;
+    PORTB = 10000000;
+    delay(50);
+  }
+
+  else if(rpm<100)
+  {
+    PORTD = (rpm<<4) & 11110000;
+    PORTB = 10000000;
+    delay(50);
+    PORTD = ((rpm/10)<<4) & 11110000;
+    PORTB = 01000000;
+    delay(50);
+  }
+
+  else if(rpm<1000)
+  {
+    PORTD = (rpm<<4) & 11110000;
+    PORTB = 10000000;
+    delay(50);
+    PORTD = ((rpm/10)<<4) & 11110000;
+    PORTB = 01000000;
+    delay(50);
+    PORTD = ((rpm/100)<<4) & 11110000;
+    PORTB = 00100000;
+    delay(50);
+  }
+    else if(rpm<1000)
+  {
+    PORTD = (rpm<<4) & 11110000;
+    PORTB = 10000000;
+    delay(50);
+    PORTD = ((rpm/10)<<4) & 11110000;
+    PORTB = 01000000;
+    delay(50);
+    PORTD = ((rpm/100)<<4) & 11110000;
+    PORTB = 00100000;
+    delay(50);
+    PORTD = ((rpm/1000)<<4) & 11110000;
+    PORTB = 00010000;
+    delay(50);
+  }
+ }
+
+ int oil_Diplay(int oilTemp)
+ {
+  if(oilTemp<10)
+  {
+    PORTD = (oilTemp<<4) & 11110000;
+    PORTB = 10000000;
+    delay(50);
+  }
+
+  else if(oilTemp<100)
+  {
+    PORTD = (oilTemp<<4) & 11110000;
+    PORTB = 10000000;
+    delay(50);
+    PORTD = ((oilTemp/10)<<4) & 11110000;
+    PORTB = 01000000;
+    delay(50);
+  }
+
+  else if(oilTemp<1000)
+  {
+    PORTD = (oilTemp<<4) & 11110000;
+    PORTB = 10000000;
+    delay(50);
+    PORTD = ((oilTemp/10)<<4) & 11110000;
+    PORTB = 01000000;
+    delay(50);
+    PORTD = ((oilTemp/100)<<4) & 11110000;
+    PORTB = 00100000;
+    delay(50);
+  }
+ }
+
+ int water_Diplay(int waterTemp)
+ {
+  if(waterTemp<10)
+  {
+    PORTD = (waterTemp<<4) & 11110000;
+    PORTB = 10000000;
+    delay(50);
+  }
+
+  else if(waterTemp<100)
+  {
+    PORTD = (waterTemp<<4) & 11110000;
+    PORTB = 10000000;
+    delay(50);
+    PORTD = ((waterTemp/10)<<4) & 11110000;
+    PORTB = 01000000;
+    delay(50);
+  }
+
+  else if(waterTemp<1000)
+  {
+    PORTD = (waterTemp<<4) & 11110000;
+    PORTB = 10000000;
+    delay(50);
+    PORTD = ((waterTemp/10)<<4) & 11110000;
+    PORTB = 01000000;
+    delay(50);
+    PORTD = ((waterTemp/100)<<4) & 11110000;
+    PORTB = 00100000;
+    delay(50);
+  }
+ }
